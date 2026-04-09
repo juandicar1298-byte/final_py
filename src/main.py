@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
 Sistema de Gestión de Información
-Aplicación principal
+Aplicación principal — Módulo 4: Menú interactivo
 """
 
 from service import RecordService
+from menu import run_menu
 
 
 # ──────────────────────────────────────────────
 # Utilidades de presentación
 # ──────────────────────────────────────────────
 
-HEADER = f"  {'ID':<10} {'Nombre':<22} {'Email':<35}"
+HEADER  = f"  {'ID':<10} {'Nombre':<22} {'Email':<35}"
 DIVIDER = "  " + "-" * 67
 
 
@@ -32,10 +33,10 @@ def section(number, title):
 
 
 # ──────────────────────────────────────────────
-# Main
+# Demo automática del CRUD (módulos anteriores)
 # ──────────────────────────────────────────────
 
-def main():
+def run_demo():
     print("\n" + "=" * 50)
     print("  Sistema de Gestión de Información")
     print("=" * 50)
@@ -136,5 +137,10 @@ def main():
     print("\n" + "=" * 50 + "\n")
 
 
+# ──────────────────────────────────────────────
+# Main — Módulo 4: lanza el menú interactivo
+# ──────────────────────────────────────────────
+
 if __name__ == "__main__":
-    main()
+    run_demo()   # Demo automática de todos los módulos anteriores
+    run_menu()   # Módulo 4: menú interactivo en consola
