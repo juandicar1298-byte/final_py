@@ -65,7 +65,7 @@ def validate_email(email):
         return False, "El email debe terminar con .com"
     
     # Patrón para validar estructura básica
-    pattern = r"^[a-zA-Z0-9_%+-]+@[a-zA-Z0-9.-]+\.com$"
+    pattern = r"^[a-zA-Z0-9_.%+-]+@[a-zA-Z0-9.-]+\.com$"
     
     if not re.match(pattern, email):
         return False, "El formato del email no es válido"
