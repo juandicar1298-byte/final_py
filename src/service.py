@@ -1,68 +1,40 @@
 #!/usr/bin/env python3
 """
 Sistema de Gestión de Información
-Módulo de servicio — CRUD completo con persistencia en archivo JSON
-Módulo 3
+Módulo 3 — CRUD completo con persistencia
+Módulo 5 — bulk_insert con *args/**kwargs
 """
 
-import json
-import os
-
 from validate import validate_record
+from file import load_data, save_data
 
 
-DATA_FILE = os.path.join("data", "records.json")
+DATA_FILE = "data/records.json"
 
 
 class RecordService:
     """
     Servicio para gestionar registros con persistencia en archivo JSON.
     Implementa CRUD completo con validaciones, list comprehensions y lambdas.
+    La persistencia se delega a file.py (load_data / save_data).
     """
 
     def __init__(self, filepath=DATA_FILE):
-        """
-        Inicializa el servicio y carga los datos persistidos.
-
-        Args:
-            filepath: Ruta del archivo JSON de persistencia
-        """
         self.filepath = filepath
-        self.records = {}   # {id: registro_completo}
-        self.ids = set()    # Set para garantizar IDs únicos
-        self._load_from_file()
+        self.records  = {}   # {id: registro_completo}
+        self.ids      = set()  # Set para IDs únicos (Módulo 1)
+        self._load()
 
     # ──────────────────────────────────────────────
-    # Persistencia
+    # Persistencia — delega a file.py (Módulo 2)
     # ──────────────────────────────────────────────
 
-    def _load_from_file(self):
-        """Carga los registros desde el archivo JSON (si existe)."""
-        if not os.path.exists(self.filepath):
-            return
+    def _load(self):
+        self.records = load_data(self.filepath)
+        self.ids     = set(self.records.keys())
 
-        try:
-            with open(self.filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            # list comprehension: reconstruir ids a partir de las claves cargadas
-            self.records = data if isinstance(data, dict) else {}
-            self.ids = {record_id for record_id in self.records}
-
-        except (json.JSONDecodeError, OSError) as e:
-            print(f"  [Advertencia] No se pudo cargar '{self.filepath}': {e}")
-            self.records = {}
-            self.ids = set()
-
-    def _save_to_file(self):
-        """Persiste todos los registros en el archivo JSON.
-        Crea la carpeta padre automaticamente si no existe."""
-        try:
-            os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.records, f, ensure_ascii=False, indent=2)
-        except OSError as e:
-            print(f"  [Error] No se pudo guardar en '{self.filepath}': {e}")
+    def _save(self):
+        save_data(self.records, self.filepath)
 
     # ──────────────────────────────────────────────
     # CREATE
@@ -71,9 +43,6 @@ class RecordService:
     def new_register(self, record_data):
         """
         Crea un nuevo registro si es válido y el ID no existe.
-
-        Args:
-            record_data (dict): Diccionario con id, name, email
 
         Returns:
             tuple: (éxito: bool, mensaje: str)
@@ -89,29 +58,54 @@ class RecordService:
 
         self.records[record_id] = {**record_data, "id": record_id}
         self.ids.add(record_id)
-        self._save_to_file()
+        self._save()
 
         return True, f"Registro '{record_id}' creado exitosamente"
 
+    def bulk_insert(self, records_list, *args, **kwargs):
+        """
+        Inserta múltiples registros de una vez.
+        Módulo 5: demuestra uso real de *args y **kwargs.
+
+        Args:
+            records_list (list[dict]): Registros a insertar.
+            *args:   Reservados para extensiones futuras.
+            **kwargs:
+                skip_errors (bool): Si True, continúa ante errores (default True).
+                prefix (str):       Prefijo para los mensajes de resultado.
+
+        Returns:
+            tuple: (insertados: int, errores: int, detalle: list[str])
+        """
+        skip_errors = kwargs.get("skip_errors", True)
+        prefix      = kwargs.get("prefix", "")
+
+        inserted, errors, detail = 0, 0, []
+
+        for record in records_list:
+            ok, msg = self.new_register(record)
+            tag = f"{prefix} " if prefix else ""
+            if ok:
+                inserted += 1
+                detail.append(f"  ✓ {tag}{msg}")
+            else:
+                errors += 1
+                detail.append(f"  ✗ {tag}{msg}")
+                if not skip_errors:
+                    break
+
+        return inserted, errors, detail
+
     # ──────────────────────────────────────────────
-    # READ — listar y buscar
+    # READ
     # ──────────────────────────────────────────────
 
     def list_records(self, order_by="name"):
         """
         Retorna todos los registros ordenados por un campo dado.
-
-        Lambda: clave de ordenamiento dinámica según 'order_by'.
-
-        Args:
-            order_by (str): Campo por el que se ordena ('id', 'name', 'email')
-
-        Returns:
-            list[dict]: Lista de registros ordenada
+        Usa lambda para ordenamiento dinámico y list comprehension.
         """
-        sort_key = lambda r: r.get(order_by, "")   # lambda para ordenamiento dinámico
-
-        # list comprehension: extraer valores y ordenar
+        sort_key = lambda r: r.get(order_by, "")
         return sorted(
             [record for record in self.records.values()],
             key=sort_key
@@ -119,39 +113,25 @@ class RecordService:
 
     def search_record(self, query):
         """
-        Busca registros cuyo nombre o email contengan el texto dado (case-insensitive).
-
-        List comprehension: filtrado en una sola expresión.
-
-        Args:
-            query (str): Texto a buscar
-
-        Returns:
-            list[dict]: Registros que coinciden con la búsqueda
+        Busca registros cuyo nombre o email contengan el texto (case-insensitive,
+        ignora acentos). Usa list comprehension con condición múltiple.
         """
-        q = query.lower().strip()
+        import unicodedata
 
-        # list comprehension con condición múltiple
+        def normalize(s: str) -> str:
+            return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("utf-8").lower()
+
+        q = normalize(query.strip())
         return [
             record for record in self.records.values()
-            if q in record.get("name", "").lower()
-            or q in record.get("email", "").lower()
+            if q in normalize(record.get("name", ""))
+            or q in normalize(record.get("email", ""))
         ]
 
     def get_record_by_id(self, record_id):
-        """
-        Obtiene un registro por ID exacto.
-
-        Args:
-            record_id (str): ID del registro
-
-        Returns:
-            tuple: (éxito: bool, dict | mensaje: str)
-        """
         record_id = str(record_id)
         if record_id not in self.ids:
             return False, f"No existe ningún registro con ID '{record_id}'"
-
         return True, self.records[record_id]
 
     # ──────────────────────────────────────────────
@@ -159,24 +139,11 @@ class RecordService:
     # ──────────────────────────────────────────────
 
     def update_record(self, record_id, new_data):
-        """
-        Actualiza los campos de un registro existente.
-        Solo actualiza los campos presentes en new_data; el ID no puede cambiar.
-
-        Args:
-            record_id (str): ID del registro a actualizar
-            new_data (dict): Campos nuevos (name y/o email)
-
-        Returns:
-            tuple: (éxito: bool, mensaje: str)
-        """
         record_id = str(record_id)
-
         if record_id not in self.ids:
             return False, f"No existe ningún registro con ID '{record_id}'"
 
-        # Construir registro candidato para validar
-        current = self.records[record_id].copy()
+        current   = self.records[record_id].copy()
         candidate = {**current, **new_data, "id": record_id}
 
         is_valid, error = validate_record(candidate)
@@ -184,8 +151,7 @@ class RecordService:
             return False, f"Datos inválidos para la actualización: {error}"
 
         self.records[record_id] = candidate
-        self._save_to_file()
-
+        self._save()
         return True, f"Registro '{record_id}' actualizado exitosamente"
 
     # ──────────────────────────────────────────────
@@ -193,24 +159,13 @@ class RecordService:
     # ──────────────────────────────────────────────
 
     def delete_record(self, record_id):
-        """
-        Elimina un registro por ID.
-
-        Args:
-            record_id (str): ID del registro a eliminar
-
-        Returns:
-            tuple: (éxito: bool, mensaje: str)
-        """
         record_id = str(record_id)
-
         if record_id not in self.ids:
             return False, f"No existe ningún registro con ID '{record_id}'"
 
         del self.records[record_id]
         self.ids.discard(record_id)
-        self._save_to_file()
-
+        self._save()
         return True, f"Registro '{record_id}' eliminado correctamente"
 
     # ──────────────────────────────────────────────
@@ -218,10 +173,8 @@ class RecordService:
     # ──────────────────────────────────────────────
 
     def get_records_count(self):
-        """Retorna la cantidad de registros almacenados."""
         return len(self.records)
 
-    # Alias de compatibilidad con módulos anteriores
     def create_record(self, record_data):
         return self.new_register(record_data)
 

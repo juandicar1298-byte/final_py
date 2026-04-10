@@ -142,5 +142,4 @@ def run_demo():
 # ──────────────────────────────────────────────
 
 if __name__ == "__main__":
-    run_demo()   # Demo automática de todos los módulos anteriores
-    run_menu()   # Módulo 4: menú interactivo en consola
+    run_menu()   # Menú interactivo en consola
